@@ -23,8 +23,7 @@ def get_crypto_price(coin):
         return response.json()[coin]["brl"]
     return None
 
-
-# Inicializa o cliente do AWS Firehose usando variáveis de ambiente
+# Inicializa o cliente do AWS Firehose
 firehose_client = boto3.client(
     "firehose",
     region_name=aws_region,
@@ -33,32 +32,33 @@ firehose_client = boto3.client(
     aws_session_token=aws_session_token
 )
 
-
-# Loop infinito para pegar o preço e enviar ao Firehose
+# Loop principal
 while True:
     coin = 'bitcoin'
     price = get_crypto_price(coin)
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     if price:
-        data = {
-            "collect": timestamp,
-            "coin": coin,
-            "price": price
-        }
-
         try:
-            # Envia para o Firehose
+            payload = {
+                "coleta": timestamp,  # <- campo coletado corretamente
+                "coin": coin,
+                "price": price
+            }
+
+            # Firehose espera bytes com \n no final
+            record_data = (json.dumps(payload) + "\n").encode('utf-8')
+
             response = firehose_client.put_record(
                 DeliveryStreamName=delivery_stream_name,
                 Record={
-                    'Data': json.dumps(data)
+                    'Data': record_data
                 }
             )
-            print(f"[{time.strftime('%H:%M:%S')}] Enviado: {data}")
+            print(f"[{time.strftime('%H:%M:%S')}] Enviado: {payload}")
         except Exception as e:
             print(f"Erro ao enviar para Firehose: {e}")
     else:
         print("Erro ao obter o preço.")
 
-    time.sleep(60)  # Espera 60 segundos antes de buscar novamente
+    time.sleep(60)
